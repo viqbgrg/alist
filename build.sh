@@ -79,8 +79,8 @@ BuildDev() {
   xgo -targets=windows/amd64,darwin/amd64,darwin/arm64 -out "$appName" -ldflags="$ldflags" -tags=jsoniter .
   mv alist-* dist
   cd dist
-  cp ./alist-windows-amd64.exe ./alist-windows-amd64-upx.exe
-  upx -9 ./alist-windows-amd64-upx.exe
+#  cp ./alist-windows-amd64.exe ./alist-windows-amd64-upx.exe
+#  upx -9 ./alist-windows-amd64-upx.exe
   find . -type f -print0 | xargs -0 md5sum >md5.txt
   cat md5.txt
 }
@@ -146,9 +146,9 @@ BuildRelease() {
   BuildWinArm64 ./build/alist-windows-arm64.exe
   xgo -out "$appName" -ldflags="$ldflags" -tags=jsoniter .
   # why? Because some target platforms seem to have issues with upx compression
-  upx -9 ./alist-linux-amd64
-  cp ./alist-windows-amd64.exe ./alist-windows-amd64-upx.exe
-  upx -9 ./alist-windows-amd64-upx.exe
+#  upx -9 ./alist-linux-amd64
+#  cp ./alist-windows-amd64.exe ./alist-windows-amd64-upx.exe
+#  upx -9 ./alist-windows-amd64-upx.exe
   mv alist-* build
 }
 
@@ -277,6 +277,8 @@ elif [ "$1" = "release" ]; then
   elif [ "$2" = "docker-multiplatform" ]; then
     BuildDockerMultiplatform
   elif [ "$2" = "linux_musl_arm" ]; then
+    BuildReleaseLinuxMuslArm
+  elif [ "$2" = "linux_arm_v7" ]; then
     BuildReleaseLinuxMuslArm
     MakeRelease "md5-linux-musl-arm.txt"
   elif [ "$2" = "linux_musl" ]; then

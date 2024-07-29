@@ -2,8 +2,10 @@ package thunder
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/alist-org/alist/v3/drivers/base"
@@ -61,7 +63,7 @@ func (x *Thunder) Init(ctx context.Context) (err error) {
 				ClientVersion:     "7.51.0.8196",
 				PackageName:       "com.xunlei.downloadprovider",
 				UserAgent:         "ANDROID-com.xunlei.downloadprovider/7.51.0.8196 netWorkType/5G appid/40 deviceName/Xiaomi_M2004j7ac deviceModel/M2004J7AC OSVersion/12 protocolVersion/301 platformVersion/10 sdkVersion/220200 Oauth2Client/0.9 (Linux 4_14_186-perf-gddfs8vbb238b) (JAVA 0)",
-				DownloadUserAgent: "Dalvik/2.1.0 (Linux; U; Android 12; M2004J7AC Build/SP1A.210812.016)",
+				DownloadUserAgent: "AndroidDownloadManager/14 (Linux; U; Android 14; 23113RKC6C Build/UKQ1.230804.001)",
 
 				refreshCTokenCk: func(token string) {
 					x.CaptchaToken = token
@@ -521,4 +523,79 @@ func (xc *XunLeiCommon) IsLogin() bool {
 	}
 	_, err := xc.Request(XLUSER_API_URL+"/user/me", http.MethodGet, nil, nil)
 	return err == nil
+}
+
+// 离线下载文件
+func (xc *XunLeiCommon) OfflineDownload(ctx context.Context, fileUrl string, parentDir model.Obj, fileName string) (*OfflineTask, error) {
+	requestBody := base.Json{
+		"kind":        "drive#file",
+		"name":        fileName,
+		"upload_type": "UPLOAD_TYPE_URL",
+		"url": base.Json{
+			"url": fileUrl,
+		},
+		"parent_id": parentDir.GetID(),
+	}
+
+	var resp OfflineDownloadResp
+	_, err := xc.Request(FILE_API_URL, http.MethodPost, func(req *resty.Request) {
+		req.SetBody(requestBody)
+	}, &resp)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp.Task, err
+}
+
+func (xc *XunLeiCommon) OfflineList(ctx context.Context, nextPageToken string, phase []string) ([]OfflineTask, error) {
+	res := make([]OfflineTask, 0)
+
+	params := map[string]string{
+		"type":       "offline",
+		"page_token": nextPageToken,
+		"with":       "reference_resource",
+	}
+
+	// 处理 phase 参数
+	if len(phase) > 0 {
+		filters := base.Json{
+			"phase": map[string]string{
+				"in": strings.Join(phase, ","),
+			},
+		}
+		filtersJSON, err := json.Marshal(filters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal filters: %w", err)
+		}
+		params["filters"] = string(filtersJSON)
+	}
+
+	var resp OfflineListResp
+	_, err := xc.Request(API_URL+"/tasks", http.MethodGet, func(req *resty.Request) {
+		req.SetContext(ctx).
+			SetQueryParams(params)
+	}, &resp)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get offline list: %w", err)
+	}
+	res = append(res, resp.Tasks...)
+	return res, nil
+}
+
+func (xc *XunLeiCommon) DeleteOfflineTasks(ctx context.Context, taskIDs []string, deleteFiles bool) error {
+	params := map[string]string{
+		"task_ids":     strings.Join(taskIDs, ","),
+		"delete_files": strconv.FormatBool(deleteFiles),
+	}
+	_, err := xc.Request(API_URL+"/tasks", http.MethodDelete, func(req *resty.Request) {
+		req.SetContext(ctx).
+			SetQueryParams(params)
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete tasks %v: %w", taskIDs, err)
+	}
+	return nil
 }

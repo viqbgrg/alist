@@ -267,19 +267,8 @@ func (b *s3Backend) PutObject(
 	}
 	bucketPath := bucket.Path
 
-	isDir := strings.HasSuffix(objectName, "/")
-	log.Debugf("isDir: %v", isDir)
-
 	fp := path.Join(bucketPath, objectName)
-	log.Debugf("fp: %s, bucketPath: %s, objectName: %s", fp, bucketPath, objectName)
-
-	var reqPath string
-	if isDir {
-		reqPath = fp + "/"
-	} else {
-		reqPath = path.Dir(fp)
-	}
-	log.Debugf("reqPath: %s", reqPath)
+	reqPath := path.Dir(fp)
 	fmeta, _ := op.GetNearestMeta(fp)
 	ctx = context.WithValue(ctx, "meta", fmeta)
 
@@ -294,10 +283,6 @@ func (b *s3Backend) PutObject(
 		} else {
 			return result, gofakes3.KeyNotFound(objectName)
 		}
-	}
-
-	if isDir {
-		return result, nil
 	}
 
 	var ti time.Time

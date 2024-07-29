@@ -71,7 +71,7 @@ outer:
 	if err != nil {
 		return err
 	}
-	if t.tool.Name() == "pikpak" {
+	if t.tool.Name() == "pikpak" || t.tool.Name() == "thunder" {
 		return nil
 	}
 	t.Status = "offline download completed, maybe transferring"
@@ -126,7 +126,7 @@ func (t *DownloadTask) Complete() error {
 		files []File
 		err   error
 	)
-	if t.tool.Name() == "pikpak" {
+	if t.tool.Name() == "pikpak" || t.tool.Name() == "thunder" {
 		return nil
 	}
 	if getFileser, ok := t.tool.(GetFileser); ok {
