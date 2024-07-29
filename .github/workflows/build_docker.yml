@@ -22,13 +22,13 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: xhofe/alist
+          images: viqbgrg/alist
 
       - name: Docker meta with ffmpeg
         id: meta-ffmpeg
         uses: docker/metadata-action@v5
         with:
-          images: xhofe/alist
+          images: viqbgrg/alist
           flavor: |
             suffix=-ffmpeg,onlatest=true
 
@@ -60,7 +60,7 @@ jobs:
         if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
-          username: xhofe
+          username: viqbgrg
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
