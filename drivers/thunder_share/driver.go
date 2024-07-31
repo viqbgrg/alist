@@ -206,8 +206,8 @@ func (d *ThunderShare) deleteDelay(fileId string) {
 	delayTime := 900
 	time.Sleep(time.Duration(delayTime) * time.Second)
 
-	log.Infoln("删除文件%s", fileId)
-	d.thunderDriver.Request(thunder.FILE_API_URL+"/{fileID}/files:batchDelete", http.MethodPost, func(r *resty.Request) {
+	log.Infoln("删除文件", fileId)
+	d.thunderDriver.Request(thunder.FILE_API_URL+":batchDelete", http.MethodPost, func(r *resty.Request) {
 		r.SetBody(base.Json{
 			"ids":   []string{fileId},
 			"space": "",
