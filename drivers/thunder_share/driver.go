@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/alist-org/alist/v3/drivers/base"
 	"github.com/alist-org/alist/v3/drivers/thunder"
 	"github.com/alist-org/alist/v3/internal/op"
+	log "github.com/sirupsen/logrus"
 	"net/http"
+	"time"
 
 	"github.com/alist-org/alist/v3/internal/driver"
 	"github.com/alist-org/alist/v3/internal/model"
@@ -29,15 +32,19 @@ func (d *ThunderShare) GetAddition() driver.Additional {
 }
 
 func (d *ThunderShare) Init(ctx context.Context) error {
-	storage, _, err := op.GetStorageAndActualPath(d.ThunderPath)
-	if err != nil {
-		return err
+	storages := op.GetAllStorages()
+
+	for _, storage := range storages {
+		thunderDriver, ok := storage.(*thunder.ThunderExpert)
+		if ok {
+			d.thunderDriver = thunderDriver
+			break
+		}
 	}
-	thunderDriver, ok := storage.(*thunder.ThunderExpert)
-	if !ok {
+	if d.thunderDriver == nil {
 		return fmt.Errorf("unsupported storage driver for offline download, only Pikpak is supported")
 	}
-	d.thunderDriver = thunderDriver
+
 	return nil
 }
 
@@ -79,6 +86,9 @@ func (d *ThunderShare) getFiles(id string) ([]model.Obj, error) {
 			}
 			return nil, errors.New(fileList.ShareStatusText)
 		}
+		if id == "" && len(fileList.Files) == 1 && fileList.Files[0].Kind == "drive#folder" {
+			return d.getFiles(fileList.Files[0].ID)
+		}
 		for i := 0; i < len(fileList.Files); i++ {
 			files = append(files, &fileList.Files[i])
 		}
@@ -108,28 +118,81 @@ func (d *ThunderShare) getSharePassToken() error {
 }
 
 func (d *ThunderShare) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*model.Link, error) {
-	var fileInfo FileInfo
-	query := map[string]string{
-		"share_id":        d.ShareId,
-		"file_id":         file.GetID(),
-		"pass_code_token": d.PassCodeToken,
+	var restoreInfo RestoreInfo
+	var hash string
+	if o, ok := file.(*Files); ok {
+		hash = o.Hash
+	} else {
+		return nil, errors.New("invalid file type")
 	}
-	_, err := d.thunderDriver.Request(API_SHARE_FILE_INFO_URL, http.MethodGet, func(r *resty.Request) {
+	_, err := d.thunderDriver.Request(API_SHARE_RESTORE_URL, http.MethodPost, func(r *resty.Request) {
 		r.SetContext(ctx)
-		r.SetQueryParams(query)
-	}, &fileInfo)
+		r.SetBody(&base.Json{
+			"file_ids":          [1]string{file.GetID()},
+			"parent_id":         d.TempPathId,
+			"pass_code_token":   d.PassCodeToken,
+			"share_id":          d.ShareId,
+			"specify_parent_id": true,
+		})
+	}, &restoreInfo)
 	if err != nil {
 		return nil, err
 	}
+	var pageToken string
+	var shareFile Files
+	for {
+		var fileList FileList
+		_, err := d.thunderDriver.Request(thunder.FILE_API_URL, http.MethodGet, func(r *resty.Request) {
+			r.SetContext(ctx)
+			r.SetQueryParams(map[string]string{
+				"space":      "",
+				"__type":     "drive",
+				"refresh":    "true",
+				"__sync":     "true",
+				"parent_id":  d.TempPathId,
+				"page_token": pageToken,
+				"with_audit": "true",
+				"limit":      "100",
+				"filters":    `{"phase":{"eq":"PHASE_TYPE_COMPLETE"},"trashed":{"eq":false}}`,
+			})
+		}, &fileList)
+		if err != nil {
+			return nil, err
+		}
+
+		for i := 0; i < len(fileList.Files); i++ {
+			if hash == fileList.Files[i].Hash {
+				shareFile = fileList.Files[i]
+				break
+			}
+		}
+
+		if fileList.NextPageToken == "" {
+			break
+		}
+		pageToken = fileList.NextPageToken
+	}
+	var lFile Files
+	_, err1 := d.thunderDriver.Request(thunder.FILE_API_URL+"/{fileID}", http.MethodGet, func(r *resty.Request) {
+		r.SetContext(ctx)
+		r.SetPathParam("fileID", shareFile.GetID())
+		//r.SetQueryParam("space", "")
+	}, &lFile)
+	if err1 != nil {
+		return nil, err1
+	}
+
+	go d.deleteDelay(file.GetID())
+
 	link := &model.Link{
-		URL: fileInfo.Files.WebContentLink,
+		URL: lFile.WebContentLink,
 		Header: http.Header{
 			"User-Agent": {d.thunderDriver.DownloadUserAgent},
 		},
 	}
 
-	if d.thunderDriver.UseVideoUrl {
-		for _, media := range fileInfo.Files.Medias {
+	if d.UseVideoUrl {
+		for _, media := range lFile.Medias {
 			if media.Link.URL != "" {
 				link.URL = media.Link.URL
 				break
@@ -137,6 +200,19 @@ func (d *ThunderShare) Link(ctx context.Context, file model.Obj, args model.Link
 		}
 	}
 	return link, nil
+}
+
+func (d *ThunderShare) deleteDelay(fileId string) {
+	delayTime := 900
+	time.Sleep(time.Duration(delayTime) * time.Second)
+
+	log.Infoln("删除文件%s", fileId)
+	d.thunderDriver.Request(thunder.FILE_API_URL+"/{fileID}/files:batchDelete", http.MethodPost, func(r *resty.Request) {
+		r.SetBody(base.Json{
+			"ids":   []string{fileId},
+			"space": "",
+		})
+	}, nil)
 }
 
 var _ driver.Driver = (*ThunderShare)(nil)

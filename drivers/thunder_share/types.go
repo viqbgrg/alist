@@ -13,6 +13,7 @@ type FileList struct {
 	ShareStatus     string  `json:"share_status"`
 	ShareStatusText string  `json:"share_status_text"`
 	Kind            string  `json:"kind"`
+	FileNum         string  `json:"file_num"`
 	NextPageToken   string  `json:"next_page_token"`
 	PassCodeToken   string  `json:"pass_code_token"`
 	Files           []Files `json:"files"`
@@ -28,6 +29,19 @@ type Link struct {
 	Token  string    `json:"token"`
 	Expire time.Time `json:"expire"`
 	Type   string    `json:"type"`
+}
+
+type RestoreInfo struct {
+	FileId          string `json:"file_id"`
+	RestoreStatus   string `json:"restore_status"`
+	RestoreTaskId   string `json:"restore_task_id"`
+	ShareStatus     string `json:"share_status"`
+	ShareStatusText string `json:"share_status_text"`
+}
+type Object struct {
+	model.Object
+	model.Thumbnail
+	Hash string
 }
 
 var _ model.Obj = (*Files)(nil)

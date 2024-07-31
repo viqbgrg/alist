@@ -11,7 +11,8 @@ type Addition struct {
 	ShareId     string `json:"share_id" required:"true"`
 	SharePwd    string `json:"share_pwd"`
 	//优先使用视频链接代替下载链接
-	UseVideoUrl bool `json:"use_video_url"`
+	UseVideoUrl bool   `json:"use_video_url"`
+	TempPathId  string `json:"temp_path_id" required:"true"`
 }
 
 var config = driver.Config{
