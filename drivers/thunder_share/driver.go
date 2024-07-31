@@ -182,7 +182,7 @@ func (d *ThunderShare) Link(ctx context.Context, file model.Obj, args model.Link
 		return nil, err1
 	}
 
-	go d.deleteDelay(file.GetID())
+	go d.deleteDelay(shareFile.GetID())
 
 	link := &model.Link{
 		URL: lFile.WebContentLink,
