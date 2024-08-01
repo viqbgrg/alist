@@ -160,6 +160,7 @@ func _fs(g *gin.RouterGroup) {
 	g.POST("/link", middlewares.AuthAdmin, handles.Link)
 	//g.POST("/add_aria2", handles.AddOfflineDownload)
 	//g.POST("/add_qbit", handles.AddQbittorrent)
+	g.POST("/share", handles.GetShareLink)
 	g.POST("/add_offline_download", handles.AddOfflineDownload)
 }
 

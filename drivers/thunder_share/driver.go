@@ -53,68 +53,7 @@ func (d *ThunderShare) Drop(ctx context.Context) error {
 }
 
 func (d *ThunderShare) List(ctx context.Context, dir model.Obj, args model.ListArgs) ([]model.Obj, error) {
-	return d.getFiles(dir.GetID())
-}
-
-func (d *ThunderShare) getFiles(id string) ([]model.Obj, error) {
-	files := make([]model.Obj, 0)
-	pageToken := "first"
-	for pageToken != "" {
-		if pageToken == "first" {
-			pageToken = ""
-		}
-		query := map[string]string{
-			"parent_id":       id,
-			"share_id":        d.ShareId,
-			"page_token":      pageToken,
-			"pass_code_token": d.PassCodeToken,
-		}
-		var fileList FileList
-		_, err := d.thunderDriver.Request(API_SHARE_DETAIL_URL, http.MethodGet, func(r *resty.Request) {
-			r.SetQueryParams(query)
-		}, &fileList)
-		if err != nil {
-			return nil, err
-		}
-		if fileList.ShareStatus != "OK" {
-			if fileList.ShareStatus == "PASS_CODE_EMPTY" || fileList.ShareStatus == "PASS_CODE_ERROR" {
-				err = d.getSharePassToken()
-				if err != nil {
-					return nil, err
-				}
-				return d.getFiles(id)
-			}
-			return nil, errors.New(fileList.ShareStatusText)
-		}
-		if id == "" && len(fileList.Files) == 1 && fileList.Files[0].Kind == "drive#folder" {
-			return d.getFiles(fileList.Files[0].ID)
-		}
-		for i := 0; i < len(fileList.Files); i++ {
-			files = append(files, &fileList.Files[i])
-		}
-
-		if fileList.NextPageToken == "" {
-			break
-		}
-		pageToken = fileList.NextPageToken
-	}
-	return files, nil
-}
-
-func (d *ThunderShare) getSharePassToken() error {
-	query := map[string]string{
-		"share_id":  d.ShareId,
-		"pass_code": d.SharePwd,
-	}
-	var fileList FileList
-	_, err := d.thunderDriver.Request(API_SHARE_URL, http.MethodGet, func(r *resty.Request) {
-		r.SetQueryParams(query)
-	}, &fileList)
-	if err != nil {
-		return err
-	}
-	d.PassCodeToken = fileList.PassCodeToken
-	return nil
+	return GetFiles(dir.GetID(), d.ShareId, d.SharePwd, "", *d.thunderDriver)
 }
 
 func (d *ThunderShare) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*model.Link, error) {
