@@ -48,7 +48,7 @@ func BuildIndex(ctx context.Context, indexPaths, ignorePaths []string, maxDepth 
 				} else if tickCount >= 5 {
 					tickCount = 0
 				}
-				log.Infof("index obj count: %d", objCount)
+
 				indexMQ.ConsumeAll(func(messages []mq.Message[ObjWithParent]) {
 					if len(messages) != 0 {
 						log.Debugf("current index: %s", messages[len(messages)-1].Content.Parent)
