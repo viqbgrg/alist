@@ -49,11 +49,12 @@ func GetShareFile(c *gin.Context) {
 }
 
 type ShareLinkReq struct {
-	Id         string `json:"id" required:"true"`
-	ShareId    string `json:"share_id" required:"true"`
-	SharePwd   string `json:"share_pwd"`
-	TempPathId string `json:"temp_path_id" required:"true"`
-	Hash       string `json:"hash" required:"true"`
+	Id            string `json:"id" required:"true"`
+	ShareId       string `json:"share_id" required:"true"`
+	SharePwd      string `json:"share_pwd"`
+	PassCodeToken string `json:"pass_code_token"`
+	TempPathId    string `json:"temp_path_id" required:"true"`
+	Hash          string `json:"hash" required:"true"`
 }
 
 func GetShareLink(c *gin.Context) {
@@ -79,7 +80,7 @@ func GetShareLink(c *gin.Context) {
 	t := thunder_share.Common{
 		req.ShareId,
 		req.SharePwd,
-		"",
+		req.PassCodeToken,
 		thunderDriver,
 	}
 	files, err := t.GetLink(req.TempPathId, req.Id, req.Hash)

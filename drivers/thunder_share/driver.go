@@ -1,5 +1,6 @@
 package thunder_share
 
+import "C"
 import (
 	"context"
 	"errors"
@@ -48,7 +49,15 @@ func (d *ThunderShare) Drop(ctx context.Context) error {
 }
 
 func (d *ThunderShare) List(ctx context.Context, dir model.Obj, args model.ListArgs) ([]model.Obj, error) {
-	return d.C.GetFiles(dir.GetID())
+	fileList, err := d.C.GetFiles(dir.GetID())
+	if err != nil {
+		return nil, errors.New(err.Error())
+	}
+	files := make([]model.Obj, 0)
+	for i := 0; i < len(fileList.Files); i++ {
+		files = append(files, &fileList.Files[i])
+	}
+	return files, nil
 }
 
 func (d *ThunderShare) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*model.Link, error) {

@@ -27,10 +27,14 @@ type Common struct {
 	PassCodeToken string
 	ThunderDriver *thunder.ThunderExpert
 }
+type FileResult struct {
+	Files         []model.Obj
+	PassCodeToken string
+}
 
-func (c *Common) GetFiles(id string) ([]model.Obj, error) {
-	files := make([]model.Obj, 0)
+func (c *Common) GetFiles(id string) (*FileList, error) {
 	pageToken := "first"
+	var fileList FileList
 	for pageToken != "" {
 		if pageToken == "first" {
 			pageToken = ""
@@ -41,7 +45,7 @@ func (c *Common) GetFiles(id string) ([]model.Obj, error) {
 			"page_token":      pageToken,
 			"pass_code_token": c.PassCodeToken,
 		}
-		var fileList FileList
+
 		_, err := c.ThunderDriver.Request(API_SHARE_DETAIL_URL, http.MethodGet, func(r *resty.Request) {
 			r.SetQueryParams(query)
 		}, &fileList)
@@ -56,13 +60,10 @@ func (c *Common) GetFiles(id string) ([]model.Obj, error) {
 				}
 				return c.GetFiles(id)
 			}
-			return nil, errors.New(fileList.ShareStatusText)
+			return nil, errors.New(fileList.ShareStatus)
 		}
 		if id == "" && len(fileList.Files) == 1 && fileList.Files[0].Kind == "drive#folder" {
 			return c.GetFiles(fileList.Files[0].ID)
-		}
-		for i := 0; i < len(fileList.Files); i++ {
-			files = append(files, &fileList.Files[i])
 		}
 
 		if fileList.NextPageToken == "" {
@@ -70,7 +71,8 @@ func (c *Common) GetFiles(id string) ([]model.Obj, error) {
 		}
 		pageToken = fileList.NextPageToken
 	}
-	return files, nil
+	fileList.PassCodeToken = c.PassCodeToken
+	return &fileList, nil
 }
 
 func (c *Common) getSharePassToken() (string, error) {
