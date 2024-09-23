@@ -2,6 +2,7 @@ package thunder_share
 
 import (
 	"errors"
+	"github.com/Xhofe/go-cache"
 	"github.com/alist-org/alist/v3/drivers/base"
 	"github.com/alist-org/alist/v3/drivers/thunder"
 	"github.com/alist-org/alist/v3/internal/model"
@@ -10,6 +11,12 @@ import (
 	"net/http"
 	"time"
 )
+
+var cacheToken = cache.NewMemCache[string]()
+
+const objTokenCacheDuration = 360 * time.Minute
+
+var exOpts = cache.WithEx[string](objTokenCacheDuration)
 
 const (
 	API_SHARE_URL           = "https://api-pan.xunlei.com/drive/v1/share"
@@ -24,17 +31,16 @@ const (
 type Common struct {
 	ShareId       string
 	SharePwd      string
-	PassCodeToken string
 	ThunderDriver *thunder.ThunderExpert
 }
-type FileResult struct {
-	Files         []model.Obj
-	PassCodeToken string
-}
 
-func (c *Common) GetFiles(id string) (*FileList, error) {
+func (c *Common) GetFiles(id string) ([]model.Obj, error) {
 	pageToken := "first"
-	var fileList FileList
+	sharePassToken, err := c.getSharePassToken()
+	if err != nil {
+		return nil, err
+	}
+	files := make([]model.Obj, 0)
 	for pageToken != "" {
 		if pageToken == "first" {
 			pageToken = ""
@@ -43,9 +49,9 @@ func (c *Common) GetFiles(id string) (*FileList, error) {
 			"parent_id":       id,
 			"share_id":        c.ShareId,
 			"page_token":      pageToken,
-			"pass_code_token": c.PassCodeToken,
+			"pass_code_token": sharePassToken,
 		}
-
+		var fileList FileList
 		_, err := c.ThunderDriver.Request(API_SHARE_DETAIL_URL, http.MethodGet, func(r *resty.Request) {
 			r.SetQueryParams(query)
 		}, &fileList)
@@ -54,10 +60,7 @@ func (c *Common) GetFiles(id string) (*FileList, error) {
 		}
 		if fileList.ShareStatus != "OK" {
 			if fileList.ShareStatus == "PASS_CODE_EMPTY" || fileList.ShareStatus == "PASS_CODE_ERROR" {
-				c.PassCodeToken, err = c.getSharePassToken()
-				if err != nil {
-					return nil, err
-				}
+				// clear cache
 				return c.GetFiles(id)
 			}
 			return nil, errors.New(fileList.ShareStatus)
@@ -65,19 +68,21 @@ func (c *Common) GetFiles(id string) (*FileList, error) {
 		if id == "" && len(fileList.Files) == 1 && fileList.Files[0].Kind == "drive#folder" {
 			return c.GetFiles(fileList.Files[0].ID)
 		}
+		for i := 0; i < len(fileList.Files); i++ {
+			files = append(files, &fileList.Files[i])
+		}
 
 		if fileList.NextPageToken == "" {
 			break
 		}
 		pageToken = fileList.NextPageToken
 	}
-	fileList.PassCodeToken = c.PassCodeToken
-	return &fileList, nil
+	return files, nil
 }
 
 func (c *Common) getSharePassToken() (string, error) {
-	if c.PassCodeToken != "" {
-		return c.PassCodeToken, nil
+	if token, ok := cacheToken.Get(c.ShareId); ok {
+		return token, nil
 	}
 	query := map[string]string{
 		"share_id":  c.ShareId,
@@ -90,23 +95,21 @@ func (c *Common) getSharePassToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	cacheToken.Set(c.ShareId, fileList.PassCodeToken, exOpts)
 	return fileList.PassCodeToken, nil
 }
 
 func (c *Common) GetLink(tempPathId string, id string, hash string) (*Files, error) {
 	var restoreInfo RestoreInfo
-	if c.PassCodeToken == "" {
-		token, err := c.getSharePassToken()
-		if err != nil {
-			return nil, err
-		}
-		c.PassCodeToken = token
+	token, tokenErr := c.getSharePassToken()
+	if tokenErr != nil {
+		return nil, tokenErr
 	}
 	_, err := c.ThunderDriver.Request(API_SHARE_RESTORE_URL, http.MethodPost, func(r *resty.Request) {
 		r.SetBody(&base.Json{
 			"file_ids":          [1]string{id},
 			"parent_id":         tempPathId,
-			"pass_code_token":   c.PassCodeToken,
+			"pass_code_token":   token,
 			"share_id":          c.ShareId,
 			"specify_parent_id": true,
 		})
